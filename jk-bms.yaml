@@ -24,7 +24,7 @@ captive_portal:
 logger:
   level: DEBUG
 
-# UART для BMS: TX на 16, RX на 17
+# UART для BMS: TX на 16, RX на 17 (это работает на ESP32)
 uart:
   tx_pin: GPIO16
   rx_pin: GPIO17
@@ -39,19 +39,21 @@ sensor:
     name: "Wi-Fi Signal"
     update_interval: 60s
 
-  # Аналоговый вход на пине 18
-  - platform: adc
-    pin: GPIO18
-    name: "Aux Voltage 1"
-    attenuation: auto
-    update_interval: 5s
+  # ЗАГЛУШКИ ВМЕСТО ADC НА 18 И 19
+  # Эти сенсоры не требуют аналоговых пинов и не вызовут ошибку сборки.
+  # Если на 18 и 19 у тебя реле — позже мы добавим туда output.
+  # Если кнопки — binary_sensor.
+  - platform: template
+    name: "Pin 18 Status (Placeholder)"
+    lambda: return 0.0;
+    unit_of_measurement: "V"
+    icon: "mdi:help-circle"
 
-  # Аналоговый вход на пине 19
-  - platform: adc
-    pin: GPIO19
-    name: "Aux Voltage 2"
-    attenuation: auto
-    update_interval: 5s
+  - platform: template
+    name: "Pin 19 Status (Placeholder)"
+    lambda: return 0.0;
+    unit_of_measurement: "V"
+    icon: "mdi:help-circle"
 
 text_sensor:
   - platform: version

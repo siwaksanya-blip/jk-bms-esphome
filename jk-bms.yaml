@@ -1,11 +1,6 @@
 esphome:
-  name: jk-bms-voltronic-38
-  friendly_name: "JK BMS Voltronic Mode"
-
-# ЭТОТ БЛОК КРИТИЧЕСКИ ВАЖЕН: он подключает внешний компонент для JK-BMS
-external_components:
-  - source: github://syssi/esphome-jk-bms@main
-    components: [jk_bms]
+  name: jk-bms-fixed
+  friendly_name: "JK BMS Fixed Build"
 
 esp32:
   board: esp32dev
@@ -29,36 +24,51 @@ logger:
   level: DEBUG
   baud_rate: 0
 
-# Один блок uart с двумя ID (исправлено от ошибки Duplicate key)
 uart:
+  # Порт для BMS (только отправка команд, чтение через modbus_controller)
   - id: bms_uart
     tx_pin: GPIO18
     rx_pin: GPIO19
     baud_rate: 115200
     parity: NONE
     stop_bits: 1
+    rx_buffer_size: 512
 
+  # Порт для Инвертора (Отправка команд + Чтение ответов)
   - id: inverter_uart
     tx_pin: GPIO16
     rx_pin: GPIO17
     baud_rate: 9600
     parity: NONE
     stop_bits: 1
+    rx_buffer_size: 256
 
-# Теперь этот компонент будет найден благодаря external_components выше
-jk_bms:
-  id: jk_bms_sensor
-  uart_id: bms_uart
-  update_interval: 5s
+# --- ИСПРАВЛЕНИЕ 1: Чтение данных через text_sensor ---
+# Этот сенсор будет автоматически читать всё, что приходит на inverter_uart.
+# Как только придут данные, сработает on_value, и мы залогируем их.
+text_sensor:
+  - platform: uart
+    uart_id: inverter_uart
+    name: "Inverter Raw Response"
+    id: inverter_resp
+    on_value:
+      then:
+        - logger.log: "Inverter ACK received: %s"
+          variables:
+            data_str: "data"
 
+# --- ИСПРАВЛЕНИЕ 2: Скрипт отправки (только write + delay) ---
 script:
   - id: send_voltronic_bms_command
     mode: single
     then:
       - logger.log: "Sending Voltronic BMS Control Command (Reg 38)..."
       - lambda: |-
+          // Формируем пакет правильно
           uint8_t raw_data = {0x01, 0x06, 0x00, 0x26, 0x00, 0x01};
           uint16_t crc = 0xFFFF;
+          
+          // Расчет CRC16
           for (int i = 0; i < 6; i++) {
             crc ^= raw_data[i];
             for (int j = 0; j < 8; j++) {
@@ -66,21 +76,20 @@ script:
               else crc = crc >> 1;
             }
           }
-          uint8_t final_packet = {
-            raw_data, raw_data, raw_data, raw_data, [1](https://github.com/syssi/esphome-jk-bms/issues/338)[2](https://dzen.ru/a/aUBa1yAviViNAEw6)[3](https://github.com/syssi/esphome-jk-bms)
-            raw_data, raw_data, [4](https://coder.social/syssi/esphome-jk-bms/issues/327)[5](https://github.com/Uksa007/esphome-jk-bms-can)
-            (uint8_t)(crc & 0xFF), (uint8_t)(crc >> 8)
-          };
+          
+          // Собираем финальный пакет (8 байт)
+          uint8_t final_packet; [8](https://espressif-docs.readthedocs-hosted.com/projects/esp-idf/en/latest/api-reference/peripherals/uart.html)
+          for(int i=0; i<6; i++) {
+            final_packet[i] = raw_data[i];
+          }
+          final_packet = (uint8_t)(crc & 0xFF); [6](https://community.home-assistant.io/t/how-to-transfer-data-from-uart/483558)
+          final_packet = (uint8_t)(crc >> 8); [7](https://forum.airgradient.com/t/airgradient-pro-with-esphome-display-keeps-turning-back-on/641)
+          
+          // Отправляем
           id(inverter_uart).write(final_packet, 8);
       - delay: 200ms
-      - uart.read:
-          uart_id: inverter_uart
-          id: inverter_resp
-          on_data:
-            then:
-              - logger.log: "Inverter ACK received: %s"
-                variables:
-                  data_str: "data"
+      // УДАЛЕНО: uart.read, так как его не существует.
+      // Чтение произойдет автоматически благодаря text_sensor выше.
 
 sensor:
   - platform: uptime

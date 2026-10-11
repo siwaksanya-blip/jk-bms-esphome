@@ -2,6 +2,11 @@ esphome:
   name: jk-bms-voltronic-38
   friendly_name: "JK BMS Voltronic Mode"
 
+# ЭТОТ БЛОК КРИТИЧЕСКИ ВАЖЕН: он подключает внешний компонент для JK-BMS
+external_components:
+  - source: github://syssi/esphome-jk-bms@main
+    components: [jk_bms]
+
 esp32:
   board: esp32dev
   framework:
@@ -24,7 +29,7 @@ logger:
   level: DEBUG
   baud_rate: 0
 
-# ЕДИНЫЙ блок uart с разными ID для двух разных шин
+# Один блок uart с двумя ID (исправлено от ошибки Duplicate key)
 uart:
   - id: bms_uart
     tx_pin: GPIO18
@@ -40,6 +45,7 @@ uart:
     parity: NONE
     stop_bits: 1
 
+# Теперь этот компонент будет найден благодаря external_components выше
 jk_bms:
   id: jk_bms_sensor
   uart_id: bms_uart
@@ -61,8 +67,8 @@ script:
             }
           }
           uint8_t final_packet = {
-            raw_data, raw_data, raw_data, raw_data, [1](https://community.home-assistant.io/t/assistance-with-esp-yaml/425489)[2](https://esphome.io/guides/troubleshooting/)[3](https://mysku.club/blog/aliexpress/105351.html)
-            raw_data, raw_data, [4](https://github.com/esphome/issues/issues/6035)[5](https://stackoverflow.com/questions/34940352/prevent-duplicate-key-warnings-in-ansible-2)
+            raw_data, raw_data, raw_data, raw_data, [1](https://github.com/syssi/esphome-jk-bms/issues/338)[2](https://dzen.ru/a/aUBa1yAviViNAEw6)[3](https://github.com/syssi/esphome-jk-bms)
+            raw_data, raw_data, [4](https://coder.social/syssi/esphome-jk-bms/issues/327)[5](https://github.com/Uksa007/esphome-jk-bms-can)
             (uint8_t)(crc & 0xFF), (uint8_t)(crc >> 8)
           };
           id(inverter_uart).write(final_packet, 8);

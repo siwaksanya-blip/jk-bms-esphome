@@ -20,12 +20,11 @@ wifi:
 
 captive_portal:
 
-# Логирование обязательно для проверки связи
 logger:
   level: DEBUG
   baud_rate: 0
 
-# UART 1: Чтение BMS Jikong (115200 бод - строго обязательно)
+# UART 1: Чтение BMS Jikong
 uart:
   id: bms_uart
   tx_pin: GPIO18
@@ -39,8 +38,7 @@ jk_bms:
   uart_id: bms_uart
   update_interval: 5s
 
-# UART 2: Связь с инвертором (Voltronic Protocol)
-# Скорость 9600 - стандарт для Voltronic. Если не работает, попробуйте 115200.
+# UART 2: Связь с инвертором (Voltronic/Modbus)
 uart:
   id: inverter_uart
   tx_pin: GPIO16
@@ -49,76 +47,26 @@ uart:
   parity: NONE
   stop_bits: 1
 
-# Глобальная переменная для хранения CRC
-globals:
-  - id: crc_value
-    type: uint16_t
-    restore_value: no
-    initial_value: '0'
-
-# Функция расчета CRC16 (Modbus RTU)
-# Это самое важное: без правильного CRC инвертор вернет ошибку 56.
-script:
-  - id: calc_crc16
-    then:
-      - lambda: |-
-          uint16_t crc = 0xFFFF;
-          uint8_t poly = 0xA001; // Polynomial for Modbus RTU
-          
-          // Получаем данные из глобальной переменной или передаем массив
-          // В нашем случае мы будем считать CRC для конкретного пакета
-          // Этот скрипт вызывается перед отправкой
-          
-          // Примечание: Мы будем считать CRC прямо внутри скрипта отправки,
-          // чтобы не усложнять передачу массивов. Этот блок оставлен как заглушка,
-          // если понадобится вынести логику отдельно.
-          return {};
-
-# Основная логика: Формируем пакет "Пункт 38" и отправляем
+# Скрипт: Формирование пакета для "пункта 38" (регистр 0x0026)
 script:
   - id: send_voltronic_bms_command
     mode: single
     then:
-      - logger.log: "Sending Voltronic BMS Control Command (Mode 38)..."
-      
-      # ПАКЕТ ДЛЯ ПУНКТА 38 (Активация BMS Control)
-      # Структура: [Addr][Func][RegAddr_Hi][RegAddr_Lo][Data_Hi][Data_Lo][CRC_Lo][CRC_Hi]
-      # Адрес устройства: 0x01 (обычно 1)
-      # Функция: 0x06 (Write Single Register)
-      # Регистр: 0x0026 (Это HEX от 38. 38 в десятичной = 0x26 в шестнадцатеричной)
-      # Данные: 0x0001 (Активировать режим BMS)
-      
-      # 1. Формируем сырой массив без CRC
-      uint8_t raw_data = {0x01, 0x06, 0x00, 0x26, 0x00, 0x01};
-      
-      // 2. Считаем CRC16 вручную (алгоритм Modbus RTU)
-      uint16_t crc = 0xFFFF;
-      for (int i = 0; i < 6; i++) {
-        crc ^= raw_data[i];
-        for (int j = 0; j < 8; j++) {
-          if (crc & 0x0001) {
-            crc = (crc >> 1) ^ 0xA001;
-          } else {
-            crc = crc >> 1;
+      - logger.log: "Sending Voltronic BMS Control Command (Reg 38)..."
+      # ВАЖНО: Вся C++ логика здесь — одна строка. Это исправляет ошибку YAML.
+      - lambda: |-
+          uint8_t raw_data = {0x01, 0x06, 0x00, 0x26, 0x00, 0x01};
+          uint16_t crc = 0xFFFF;
+          for (int i = 0; i < 6; i++) {
+            crc ^= raw_data[i];
+            for (int j = 0; j < 8; j++) {
+              if (crc & 0x0001) crc = (crc >> 1) ^ 0xA001;
+              else crc = crc >> 1;
+            }
           }
-        }
-      }
-      
-      // 3. Добавляем CRC в конец пакета (Little Endian: Low Byte, High Byte)
-      uint8_t final_packet = {
-        raw_data, raw_data, raw_data, raw_data, [1](https://jikongbms.com/download/)[2](https://smacont.ru/wiki/046/)[3](https://wiki.navtelecom.ru/ru/home/developers/protocols/modbus) 
-        raw_data, raw_data, [4](https://support.rollsbattery.com/en/support/solutions/articles/262306-rolls-lfp-ess-connecting-to-voltronic-inverters)[5](https://www.jkbms.net/downloads) 
-        (uint8_t)(crc & 0xFF), (uint8_t)(crc >> 8)
-      };
-      
-      // 4. Отправляем пакет в UART инвертора
-      auto &u = id(inverter_uart);
-      u.write(final_packet, 8);
-      
-      // 5. Ждем ответа (таймаут 200мс)
+          uint8_t final_packet = {raw_data, raw_data, raw_data, raw_data, raw_data, raw_data, (uint8_t)(crc & 0xFF), (uint8_t)(crc >> 8)};
+          id(inverter_uart).write(final_packet, 8);
       - delay: 200ms
-      
-      # Читаем ответ от инвертора (он должен вернуть тот же пакет, если успешно)
       - uart.read:
           uart_id: inverter_uart
           id: inverter_resp
@@ -128,7 +76,6 @@ script:
                 variables:
                   data_str: "data"
 
-# Сенсоры для мониторинга (BMS данные появятся автоматически)
 sensor:
   - platform: uptime
     name: "Uptime"
@@ -140,7 +87,6 @@ text_sensor:
   - platform: version
     name: "ESPHome Version"
 
-# Автозапуск команды каждые 5 секунд (синхронно с обновлением BMS)
 interval:
   - interval: 5s
     then:

@@ -1,6 +1,6 @@
 esphome:
-  name: jk-bms-onefile
-  friendly_name: "JK BMS One File"
+  name: jk-bms-final
+  friendly_name: "JK BMS Final"
 
 esp32:
   board: esp32dev
@@ -41,7 +41,7 @@ uart:
     rx_buffer_size: 256
 
 text_sensor:
-  - platform: uart
+  - platform: uart.text_sensor
     uart_id: inverter_uart
     name: "Inverter Data"
     id: inverter_resp
@@ -62,7 +62,7 @@ script:
     then:
       - logger.log: "Sending Modbus command..."
       - lambda: |-
-          uint8_t raw_data = {0x01, 0x06, 0x00, 0x26, 0x00, 0x01};
+          uint8_t raw_data = {0x01, 0x06, 0x00, 0x26, 0x00, 0x01}; [6](https://developers.esphome.io/architecture/logging/overview/)
           uint16_t crc = 0xFFFF;
           for (int i = 0; i < 6; i++) {
             crc ^= raw_data[i];
@@ -74,12 +74,12 @@ script:
               }
             }
           }
-          uint8_t final_packet; [8](https://discourse.nodered.org/t/esphome-yaml-how-could-i-pass-an-int-received-by-mqtt-payload-to-use-as-a-delay-time/34482)
+          uint8_t final_packet; [8](https://github.com/KG3RK3N/esphome-uart-p2p)
           for(int i = 0; i < 6; i++) {
             final_packet[i] = raw_data[i];
           }
-          final_packet = (uint8_t)(crc & 0xFF); [6](https://www.electrikman.ru/news/esphome-2026-7-chto-proverit-pered-obnovleniem-esp32/)
-          final_packet = (uint8_t)(crc >> 8); [7](https://esphome.io/guides/troubleshooting/)
+          final_packet = (uint8_t)(crc & 0xFF); [6](https://developers.esphome.io/architecture/logging/overview/)
+          final_packet = (uint8_t)(crc >> 8); [7](https://mysku.club/blog/aliexpress/105351.html)
           id(inverter_uart).write(final_packet, 8);
       - delay: 200ms
 

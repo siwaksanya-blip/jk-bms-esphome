@@ -24,7 +24,7 @@ jobs:
 
       - name: Install ESPHome
         # Используем 2024.8.3, так как версии .4 не существует в PyPI
-        run: pip install esphome==2024.8.3
+        run: pip install esphome==2024.2.0
 
       - name: Build firmware
         # ВАЖНО: Проверь имя файла ниже. Если твой конфиг называется esphome.yaml, замени jk-bms.yaml на esphome.yaml

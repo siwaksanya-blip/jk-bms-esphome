@@ -24,36 +24,32 @@ logger:
   level: DEBUG
   baud_rate: 0
 
-# UART 1: Чтение BMS Jikong
+# ЕДИНЫЙ блок uart с разными ID для двух разных шин
 uart:
-  id: bms_uart
-  tx_pin: GPIO18
-  rx_pin: GPIO19
-  baud_rate: 115200
-  parity: NONE
-  stop_bits: 1
+  - id: bms_uart
+    tx_pin: GPIO18
+    rx_pin: GPIO19
+    baud_rate: 115200
+    parity: NONE
+    stop_bits: 1
+
+  - id: inverter_uart
+    tx_pin: GPIO16
+    rx_pin: GPIO17
+    baud_rate: 9600
+    parity: NONE
+    stop_bits: 1
 
 jk_bms:
   id: jk_bms_sensor
   uart_id: bms_uart
   update_interval: 5s
 
-# UART 2: Связь с инвертором (Voltronic/Modbus)
-uart:
-  id: inverter_uart
-  tx_pin: GPIO16
-  rx_pin: GPIO17
-  baud_rate: 9600
-  parity: NONE
-  stop_bits: 1
-
-# Скрипт: Формирование пакета для "пункта 38" (регистр 0x0026)
 script:
   - id: send_voltronic_bms_command
     mode: single
     then:
       - logger.log: "Sending Voltronic BMS Control Command (Reg 38)..."
-      # ВАЖНО: Вся C++ логика здесь — одна строка. Это исправляет ошибку YAML.
       - lambda: |-
           uint8_t raw_data = {0x01, 0x06, 0x00, 0x26, 0x00, 0x01};
           uint16_t crc = 0xFFFF;
@@ -64,7 +60,11 @@ script:
               else crc = crc >> 1;
             }
           }
-          uint8_t final_packet = {raw_data, raw_data, raw_data, raw_data, raw_data, raw_data, (uint8_t)(crc & 0xFF), (uint8_t)(crc >> 8)};
+          uint8_t final_packet = {
+            raw_data, raw_data, raw_data, raw_data, [1](https://community.home-assistant.io/t/assistance-with-esp-yaml/425489)[2](https://esphome.io/guides/troubleshooting/)[3](https://mysku.club/blog/aliexpress/105351.html)
+            raw_data, raw_data, [4](https://github.com/esphome/issues/issues/6035)[5](https://stackoverflow.com/questions/34940352/prevent-duplicate-key-warnings-in-ansible-2)
+            (uint8_t)(crc & 0xFF), (uint8_t)(crc >> 8)
+          };
           id(inverter_uart).write(final_packet, 8);
       - delay: 200ms
       - uart.read:
